@@ -8,12 +8,11 @@ namespace rafalmasiarek\Mailer;
  * Builds a complete RFC 5322 message (headers + body) ready to send as SMTP
  * DATA content.
  *
- * Supports three body shapes:
- *   - text only
- *   - multipart/alternative (html + text), optionally wrapped in
- *     multipart/mixed when attachments are present
- *   - a verbatim RawMimeBody — attachments still wrap it in
- *     multipart/mixed if present, otherwise it is used as the top-level body
+ * Body nesting, innermost to outermost: resolveBody() (text/plain,
+ * text/html, or multipart/alternative, or a verbatim RawMimeBody) is wrapped
+ * in multipart/related when inline-embedded parts are present, which is in
+ * turn wrapped in multipart/mixed when attachments are present. Matches the
+ * RFC 2046 §5.1 recommended nesting order (mixed > related > alternative).
  *
  * Header values are passed through PHP's own mb_encode_mimeheader() (RFC 2047)
  * so non-ASCII subjects/display names degrade safely rather than corrupting
@@ -24,18 +23,28 @@ namespace rafalmasiarek\Mailer;
 final class MimeBuilder
 {
     /**
-     * @param string                                          $fromEmail   Sender address.
-     * @param string                                          $fromName    Sender display name (may be empty).
-     * @param string                                          $toEmail     Recipient address.
-     * @param string                                          $toName      Recipient display name (may be empty).
-     * @param string|null                                     $replyTo     Reply-To address, or null.
-     * @param string                                          $subject     Subject line.
-     * @param string|null                                     $htmlBody    HTML body, or null when not used.
-     * @param string|null                                     $textBody    Plain-text body, or null when not used.
-     * @param list<array{path: string, name?: string}>        $attachments Files to attach.
-     * @param RawMimeBody|null                                $rawBody     Verbatim body, takes
-     *                                                                     precedence over html/text when set.
-     * @param string                                          $messageId   Value for the Message-ID header (without angle brackets).
+     * @param string                                                        $fromEmail     Sender address.
+     * @param string                                                        $fromName      Sender display name (may be empty).
+     * @param string                                                        $toEmail       Recipient address.
+     * @param string                                                        $toName        Recipient display name (may be empty).
+     * @param string|null                                                   $replyTo       Reply-To address, or null.
+     * @param string                                                        $subject       Subject line.
+     * @param string|null                                                   $htmlBody      HTML body, or null when not used.
+     * @param string|null                                                   $textBody      Plain-text body, or null when not used.
+     * @param list<array{path: string, name?: string, mimeType?: string}>   $attachments   Files to attach.
+     * @param RawMimeBody|null                                              $rawBody       Verbatim body, takes
+     *                                                                                      precedence over html/text when set.
+     * @param string                                                        $messageId     Value for the Message-ID header (without angle brackets).
+     * @param list<array{email: string, name?: string}>                     $cc            Carbon-copy recipients (header only — envelope
+     *                                                                                      recipients are a transport concern, not built here).
+     * @param list<array{path: string, cid: string, name?: string, mimeType?: string}> $embeds Inline parts referenced from the HTML body as
+     *                                                                                      "cid:...". Ignored when $rawBody is set.
+     * @param array<string, string>                                         $customHeaders Additional raw header lines, name => value.
+     * @param string|null                                                   $inReplyTo     Message-ID this message replies to (without angle brackets).
+     * @param list<string>                                                  $references    Message-IDs for the References header (without angle brackets).
+     *
+     * @throws SmtpException When an attachment/embed path is not readable, or a
+     *                        custom header value contains embedded line breaks.
      *
      * @return string Complete message: headers, blank line, body.
      */
@@ -51,8 +60,20 @@ final class MimeBuilder
         array $attachments,
         ?RawMimeBody $rawBody,
         string $messageId,
+        array $cc = [],
+        array $embeds = [],
+        array $customHeaders = [],
+        ?string $inReplyTo = null,
+        array $references = [],
     ): string {
         [$bodyContentType, $bodyEncoding, $bodyContent] = self::resolveBody($htmlBody, $textBody, $rawBody);
+
+        if ($embeds !== [] && $rawBody === null) {
+            $relatedBoundary = self::boundary('related');
+            $bodyContent     = self::wrapInRelated($relatedBoundary, $bodyContentType, $bodyEncoding, $bodyContent, $embeds);
+            $bodyContentType = 'multipart/related; boundary="' . $relatedBoundary . '"';
+            $bodyEncoding    = '8bit';
+        }
 
         if ($attachments !== []) {
             $mixedBoundary = self::boundary('mixed');
@@ -62,30 +83,57 @@ final class MimeBuilder
         }
 
         $headers = [
-            'Date'                     => \gmdate('D, d M Y H:i:s') . ' +0000',
-            'From'                     => self::formatAddress($fromEmail, $fromName),
-            'To'                       => self::formatAddress($toEmail, $toName),
-            'Subject'                  => self::encodeHeader($subject),
-            'Message-ID'               => '<' . $messageId . '>',
-            'MIME-Version'             => '1.0',
-            'Content-Type'             => $bodyContentType,
-            'Content-Transfer-Encoding' => $bodyEncoding,
+            'Date'                      => \gmdate('D, d M Y H:i:s') . ' +0000',
+            'From'                      => self::formatAddress($fromEmail, $fromName),
+            'To'                        => self::formatAddress($toEmail, $toName),
         ];
+
+        if ($cc !== []) {
+            $headers['Cc'] = \implode(', ', \array_map(
+                static fn (array $addr): string => self::formatAddress($addr['email'], $addr['name'] ?? ''),
+                $cc
+            ));
+        }
+
+        $headers['Subject']    = self::encodeHeader($subject);
+        $headers['Message-ID'] = '<' . $messageId . '>';
+
+        if ($inReplyTo !== null && $inReplyTo !== '') {
+            $headers['In-Reply-To'] = '<' . $inReplyTo . '>';
+        }
+
+        if ($references !== []) {
+            $headers['References'] = \implode(' ', \array_map(
+                static fn (string $id): string => '<' . $id . '>',
+                $references
+            ));
+        }
 
         if ($replyTo !== null && $replyTo !== '') {
             $headers['Reply-To'] = self::formatAddress($replyTo, '');
         }
+
+        $headers['MIME-Version']             = '1.0';
+        $headers['Content-Type']             = $bodyContentType;
+        $headers['Content-Transfer-Encoding'] = $bodyEncoding;
 
         $headerLines = [];
         foreach ($headers as $name => $value) {
             $headerLines[] = "{$name}: {$value}";
         }
 
+        foreach ($customHeaders as $name => $value) {
+            if (\str_contains($name, "\r") || \str_contains($name, "\n") || \str_contains($value, "\r") || \str_contains($value, "\n")) {
+                throw new SmtpException("Custom header \"{$name}\" contains embedded line breaks.");
+            }
+            $headerLines[] = "{$name}: " . self::encodeHeader($value);
+        }
+
         return \implode("\r\n", $headerLines) . "\r\n\r\n" . $bodyContent;
     }
 
     /**
-     * Resolves the top-level content-type/encoding/body before any attachment wrapping.
+     * Resolves the top-level content-type/encoding/body before any related/mixed wrapping.
      *
      * @param string|null $htmlBody
      * @param string|null $textBody
@@ -123,13 +171,66 @@ final class MimeBuilder
     }
 
     /**
+     * Wraps the already-resolved body plus inline parts in multipart/related.
+     *
+     * @param string                                                             $boundary
+     * @param string                                                             $innerContentType
+     * @param string                                                             $innerEncoding
+     * @param string                                                             $innerBody
+     * @param list<array{path: string, cid: string, name?: string, mimeType?: string}> $embeds
+     *
+     * @throws SmtpException When an embed path is not readable.
+     *
+     * @return string
+     */
+    private static function wrapInRelated(
+        string $boundary,
+        string $innerContentType,
+        string $innerEncoding,
+        string $innerBody,
+        array $embeds
+    ): string {
+        $parts = [];
+        $parts[] =
+            "--{$boundary}\r\n"
+            . "Content-Type: {$innerContentType}\r\n"
+            . "Content-Transfer-Encoding: {$innerEncoding}\r\n\r\n"
+            . $innerBody;
+
+        foreach ($embeds as $embed) {
+            $path = $embed['path'];
+            $cid  = $embed['cid'];
+            $name = $embed['name'] ?? \basename($path);
+            $data = @\file_get_contents($path);
+            if ($data === false) {
+                throw new SmtpException("Embedded file not readable: \"{$path}\".");
+            }
+
+            $mimeType    = $embed['mimeType'] ?? self::guessMimeType($path);
+            $encodedName = self::encodeHeader($name);
+
+            $parts[] =
+                "--{$boundary}\r\n"
+                . "Content-Type: {$mimeType}; name=\"{$encodedName}\"\r\n"
+                . "Content-Transfer-Encoding: base64\r\n"
+                . "Content-ID: <{$cid}>\r\n"
+                . "Content-Disposition: inline; filename=\"{$encodedName}\"\r\n\r\n"
+                . self::chunkBase64($data);
+        }
+
+        return \implode('', $parts) . "--{$boundary}--\r\n";
+    }
+
+    /**
      * Wraps the already-resolved body plus attachments in multipart/mixed.
      *
-     * @param string                                   $boundary
-     * @param string                                   $innerContentType
-     * @param string                                   $innerEncoding
-     * @param string                                   $innerBody
-     * @param list<array{path: string, name?: string}> $attachments
+     * @param string                                                        $boundary
+     * @param string                                                        $innerContentType
+     * @param string                                                        $innerEncoding
+     * @param string                                                        $innerBody
+     * @param list<array{path: string, name?: string, mimeType?: string}>  $attachments
+     *
+     * @throws SmtpException When an attachment path is not readable.
      *
      * @return string
      */
@@ -155,7 +256,7 @@ final class MimeBuilder
                 throw new SmtpException("Attachment not readable: \"{$path}\".");
             }
 
-            $mimeType = self::guessMimeType($path);
+            $mimeType    = $attachment['mimeType'] ?? self::guessMimeType($path);
             $encodedName = self::encodeHeader($name);
 
             $parts[] =

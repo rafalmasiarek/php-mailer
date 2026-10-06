@@ -20,6 +20,12 @@ use rafalmasiarek\DnsResolver\DnsResolverInterface;
  * callback receiving "C: ..."/"S: ..." transcript lines (pair with
  * SmtpDebugCapture for AUTH redaction + structured logging).
  *
+ * open()/dispatch()/close() allow sending multiple messages over one
+ * connection (session reuse); send() is a single-message convenience
+ * wrapper around the three. $maxPerSecond throttles between dispatch()
+ * calls within a session; $restartThreshold reconnects automatically after
+ * N dispatches, for servers that rate-limit or drop long-lived connections.
+ *
  * @package rafalmasiarek\Mailer
  */
 final class SmtpClient
@@ -33,15 +39,33 @@ final class SmtpClient
     /** @var callable(string): void|null */
     private $debugCallback = null;
 
+    private int $dispatchCount = 0;
+
+    private float $lastDispatchAt = 0.0;
+
+    private string $openHost = '';
+
+    private int $openPort = 0;
+
+    private string $openEncryption = '';
+
+    private string $openUsername = '';
+
+    private string $openPassword = '';
+
     /**
-     * @param DnsResolverInterface $dns     Resolver used to pin the connection's target IP.
-     * @param LoggerInterface|null $logger  PSR-3 logger; NullLogger when omitted.
-     * @param float                $timeout Socket read/connect timeout in seconds.
+     * @param DnsResolverInterface $dns              Resolver used to pin the connection's target IP.
+     * @param LoggerInterface|null $logger           PSR-3 logger; NullLogger when omitted.
+     * @param float                $timeout          Socket read/connect timeout in seconds.
+     * @param float                $maxPerSecond     Maximum dispatch() calls per second within a session; 0 disables throttling.
+     * @param int                  $restartThreshold Reconnect automatically after this many dispatch() calls; 0 disables restarting.
      */
     public function __construct(
         private readonly DnsResolverInterface $dns,
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly float $timeout = 30.0,
+        private readonly float $maxPerSecond = 0.0,
+        private readonly int $restartThreshold = 0,
     ) {
     }
 
@@ -60,15 +84,19 @@ final class SmtpClient
 
     /**
      * Sends one message over a fresh connection, then disconnects.
+     * Convenience wrapper around open()/dispatch()/close() for callers that
+     * don't need session reuse.
      *
-     * @param string $host         SMTP server hostname.
-     * @param int    $port         SMTP server port.
-     * @param string $encryption   'tls' (STARTTLS), 'ssl' (implicit TLS), or '' (none).
-     * @param string $username     SMTP username, or '' to skip authentication.
-     * @param string $password     SMTP password.
-     * @param string $envelopeFrom Envelope sender address (MAIL FROM).
-     * @param string $envelopeTo   Envelope recipient address (RCPT TO).
-     * @param string $rawMessage   Complete RFC 5322 message (headers + body) from MimeBuilder.
+     * @param string       $host                SMTP server hostname.
+     * @param int          $port                SMTP server port.
+     * @param string       $encryption          'tls' (STARTTLS), 'ssl' (implicit TLS), or '' (none).
+     * @param string       $username            SMTP username, or '' to skip authentication.
+     * @param string       $password            SMTP password.
+     * @param string       $envelopeFrom        Envelope sender address (MAIL FROM).
+     * @param list<string> $envelopeRecipients  Envelope recipient addresses (RCPT TO) — to, cc, and
+     *                                          bcc addresses combined; headers are built separately
+     *                                          by MimeBuilder and never derived from this list.
+     * @param string       $rawMessage          Complete RFC 5322 message (headers + body) from MimeBuilder.
      *
      * @throws SmtpException On any protocol or transport failure.
      *
@@ -81,35 +109,132 @@ final class SmtpClient
         string $username,
         string $password,
         string $envelopeFrom,
-        string $envelopeTo,
+        array $envelopeRecipients,
         string $rawMessage,
     ): void {
+        $this->open($host, $port, $encryption, $username, $password);
         try {
-            $this->connect($host, $port, $encryption === 'ssl');
-            $this->readGreeting();
+            $this->dispatch($envelopeFrom, $envelopeRecipients, $rawMessage);
+        } finally {
+            $this->close();
+        }
+    }
+
+    /**
+     * Opens a connection and authenticates, ready for one or more dispatch() calls.
+     *
+     * @param string $host       SMTP server hostname.
+     * @param int    $port       SMTP server port.
+     * @param string $encryption 'tls' (STARTTLS), 'ssl' (implicit TLS), or '' (none).
+     * @param string $username   SMTP username, or '' to skip authentication.
+     * @param string $password   SMTP password.
+     *
+     * @throws SmtpException On any protocol or transport failure.
+     *
+     * @return void
+     */
+    public function open(string $host, int $port, string $encryption, string $username, string $password): void
+    {
+        $this->connect($host, $port, $encryption === 'ssl');
+        $this->readGreeting();
+        $capabilities = $this->ehlo($host);
+
+        if ($encryption === 'tls') {
+            $this->command('STARTTLS', [220]);
+            $this->enableCrypto($host);
             $capabilities = $this->ehlo($host);
+        }
 
-            if ($encryption === 'tls') {
-                $this->command('STARTTLS', [220]);
-                $this->enableCrypto($host);
-                $capabilities = $this->ehlo($host);
-            }
+        if ($username !== '') {
+            $this->authenticate($username, $password, $capabilities);
+        }
 
-            if ($username !== '') {
-                $this->authenticate($username, $password, $capabilities);
-            }
+        $this->openHost       = $host;
+        $this->openPort       = $port;
+        $this->openEncryption = $encryption;
+        $this->openUsername   = $username;
+        $this->openPassword   = $password;
+        $this->dispatchCount  = 0;
+    }
 
+    /**
+     * Sends one message over the already-open connection. Applies the
+     * configured $maxPerSecond throttle before sending, and reconnects
+     * automatically afterward once $restartThreshold dispatches have been
+     * reached on this connection.
+     *
+     * @param string       $envelopeFrom       Envelope sender address (MAIL FROM).
+     * @param list<string> $envelopeRecipients Envelope recipient addresses (RCPT TO).
+     * @param string       $rawMessage         Complete RFC 5322 message (headers + body) from MimeBuilder.
+     *
+     * @throws SmtpException On any protocol or transport failure.
+     *
+     * @return void
+     */
+    public function dispatch(string $envelopeFrom, array $envelopeRecipients, string $rawMessage): void
+    {
+        $this->throttle();
+
+        try {
             $this->command('MAIL FROM:<' . $envelopeFrom . '>', [250]);
-            $this->command('RCPT TO:<' . $envelopeTo . '>', [250, 251]);
+            foreach ($envelopeRecipients as $recipient) {
+                $this->command('RCPT TO:<' . $recipient . '>', [250, 251]);
+            }
             $this->sendData($rawMessage);
 
-            $this->logger->info('mail.sent', ['to' => $envelopeTo]);
+            $this->logger->info('mail.sent', ['to' => \implode(',', $envelopeRecipients)]);
         } catch (\Throwable $e) {
-            $this->logger->error('mail.failed', ['to' => $envelopeTo, 'error' => $e->getMessage()]);
+            $this->logger->error('mail.failed', ['to' => \implode(',', $envelopeRecipients), 'error' => $e->getMessage()]);
             throw $e instanceof SmtpException ? $e : new SmtpException($e->getMessage(), 0, $e);
-        } finally {
-            $this->quit();
         }
+
+        $this->dispatchCount++;
+        $this->lastDispatchAt = \microtime(true);
+
+        if ($this->restartThreshold > 0 && $this->dispatchCount >= $this->restartThreshold) {
+            $this->restart();
+        }
+    }
+
+    /**
+     * Sends QUIT and closes the connection opened by open(). Best-effort — never throws.
+     *
+     * @return void
+     */
+    public function close(): void
+    {
+        $this->quit();
+    }
+
+    /**
+     * Sleeps as needed so dispatch() calls within a session respect $maxPerSecond.
+     *
+     * @return void
+     */
+    private function throttle(): void
+    {
+        if ($this->maxPerSecond <= 0.0 || $this->lastDispatchAt === 0.0) {
+            return;
+        }
+
+        $minInterval = 1.0 / $this->maxPerSecond;
+        $elapsed     = \microtime(true) - $this->lastDispatchAt;
+        if ($elapsed < $minInterval) {
+            \usleep((int) (($minInterval - $elapsed) * 1_000_000));
+        }
+    }
+
+    /**
+     * Closes and reopens the connection with the same credentials used by the last open() call.
+     *
+     * @throws SmtpException On any protocol or transport failure.
+     *
+     * @return void
+     */
+    private function restart(): void
+    {
+        $this->quit();
+        $this->open($this->openHost, $this->openPort, $this->openEncryption, $this->openUsername, $this->openPassword);
     }
 
     /**
