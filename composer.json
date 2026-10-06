@@ -1,0 +1,18 @@
+{
+    "name": "rafalmasiarek/mailer",
+    "description": "From-scratch SMTP client + MIME builder (no PHPMailer dependency) with native PGP/MIME body support and structured PSR-3 SMTP diagnostics.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.2",
+        "psr/log": "^3.0",
+        "psr/clock": "^1.0",
+        "rafalmasiarek/dns-resolver": "^0.1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "rafalmasiarek\\Mailer\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}
