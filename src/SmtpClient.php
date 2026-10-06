@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace rafalmasiarek\Mailer;
 
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use rafalmasiarek\DnsResolver\DnsResolverInterface;
@@ -70,10 +71,12 @@ final class SmtpClient
      * @param int                         $restartThreshold Reconnect automatically after this many dispatch() calls; 0 disables restarting.
      * @param DeadLetterStoreInterface|null $deadLetterStore Receives a FailedDelivery when dispatch() fails;
      *                                                       SmtpException is still thrown either way.
-     * @param TlsOptions|null              $tls              TLS verification/client-certificate behavior;
+     * @param TlsOptions                   $tls              TLS verification/client-certificate behavior;
      *                                                       defaults (verify against the system CA store,
      *                                                       no client certificate) when omitted. Applies to
      *                                                       both implicit TLS and STARTTLS.
+     * @param ClockInterface               $clock            Timestamps FailedDelivery::$failedAt; system clock
+     *                                                       when omitted.
      */
     public function __construct(
         private readonly DnsResolverInterface $dns,
@@ -83,6 +86,7 @@ final class SmtpClient
         private readonly int $restartThreshold = 0,
         private readonly ?DeadLetterStoreInterface $deadLetterStore = null,
         private readonly TlsOptions $tls = new TlsOptions(),
+        private readonly ClockInterface $clock = new SystemClock(),
     ) {
     }
 
@@ -291,7 +295,7 @@ final class SmtpClient
                 $envelopeRecipients,
                 $rawMessage,
                 $error,
-                new \DateTimeImmutable(),
+                $this->clock->now(),
             ));
         } catch (\Throwable) {
             // must never mask the original SmtpException
