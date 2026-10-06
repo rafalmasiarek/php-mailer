@@ -110,6 +110,6 @@ final class SmtpDebugCapture
      */
     private function append(string $line): void
     {
-        $this->lines[] = '[' . $this->clock->now()->format('Y-m-d H:i:s') . '] ' . $line;
+        $this->lines[] = '[' . $this->clock->now()->format(\DateTimeInterface::ATOM) . '] ' . $line;
     }
 }
