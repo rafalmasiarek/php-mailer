@@ -26,6 +26,12 @@ use rafalmasiarek\DnsResolver\DnsResolverInterface;
  * calls within a session; $restartThreshold reconnects automatically after
  * N dispatches, for servers that rate-limit or drop long-lived connections.
  *
+ * DsnOptions requests a Delivery Status Notification (RFC 3461) per
+ * dispatch() call, applied only when the server's EHLO advertises DSN.
+ * $deadLetterStore, when set, receives a FailedDelivery on any dispatch()
+ * failure — SmtpException is still thrown either way. $tls controls
+ * certificate verification and an optional client certificate for mutual TLS.
+ *
  * @package rafalmasiarek\Mailer
  */
 final class SmtpClient
@@ -53,12 +59,21 @@ final class SmtpClient
 
     private string $openPassword = '';
 
+    /** @var list<string> EHLO capability lines from the most recent open(), uppercase. */
+    private array $capabilities = [];
+
     /**
-     * @param DnsResolverInterface $dns              Resolver used to pin the connection's target IP.
-     * @param LoggerInterface|null $logger           PSR-3 logger; NullLogger when omitted.
-     * @param float                $timeout          Socket read/connect timeout in seconds.
-     * @param float                $maxPerSecond     Maximum dispatch() calls per second within a session; 0 disables throttling.
-     * @param int                  $restartThreshold Reconnect automatically after this many dispatch() calls; 0 disables restarting.
+     * @param DnsResolverInterface        $dns              Resolver used to pin the connection's target IP.
+     * @param LoggerInterface|null        $logger           PSR-3 logger; NullLogger when omitted.
+     * @param float                       $timeout          Socket read/connect timeout in seconds.
+     * @param float                       $maxPerSecond     Maximum dispatch() calls per second within a session; 0 disables throttling.
+     * @param int                         $restartThreshold Reconnect automatically after this many dispatch() calls; 0 disables restarting.
+     * @param DeadLetterStoreInterface|null $deadLetterStore Receives a FailedDelivery when dispatch() fails;
+     *                                                       SmtpException is still thrown either way.
+     * @param TlsOptions|null              $tls              TLS verification/client-certificate behavior;
+     *                                                       defaults (verify against the system CA store,
+     *                                                       no client certificate) when omitted. Applies to
+     *                                                       both implicit TLS and STARTTLS.
      */
     public function __construct(
         private readonly DnsResolverInterface $dns,
@@ -66,6 +81,8 @@ final class SmtpClient
         private readonly float $timeout = 30.0,
         private readonly float $maxPerSecond = 0.0,
         private readonly int $restartThreshold = 0,
+        private readonly ?DeadLetterStoreInterface $deadLetterStore = null,
+        private readonly TlsOptions $tls = new TlsOptions(),
     ) {
     }
 
@@ -87,16 +104,18 @@ final class SmtpClient
      * Convenience wrapper around open()/dispatch()/close() for callers that
      * don't need session reuse.
      *
-     * @param string       $host                SMTP server hostname.
-     * @param int          $port                SMTP server port.
-     * @param string       $encryption          'tls' (STARTTLS), 'ssl' (implicit TLS), or '' (none).
-     * @param string       $username            SMTP username, or '' to skip authentication.
-     * @param string       $password            SMTP password.
-     * @param string       $envelopeFrom        Envelope sender address (MAIL FROM).
-     * @param list<string> $envelopeRecipients  Envelope recipient addresses (RCPT TO) — to, cc, and
-     *                                          bcc addresses combined; headers are built separately
-     *                                          by MimeBuilder and never derived from this list.
-     * @param string       $rawMessage          Complete RFC 5322 message (headers + body) from MimeBuilder.
+     * @param string          $host                SMTP server hostname.
+     * @param int             $port                SMTP server port.
+     * @param string          $encryption          'tls' (STARTTLS), 'ssl' (implicit TLS), or '' (none).
+     * @param string          $username            SMTP username, or '' to skip authentication.
+     * @param string          $password            SMTP password.
+     * @param string          $envelopeFrom        Envelope sender address (MAIL FROM).
+     * @param list<string>    $envelopeRecipients  Envelope recipient addresses (RCPT TO) — to, cc, and
+     *                                             bcc addresses combined; headers are built separately
+     *                                             by MimeBuilder and never derived from this list.
+     * @param string          $rawMessage          Complete RFC 5322 message (headers + body) from MimeBuilder.
+     * @param DsnOptions|null $dsn                 Delivery Status Notification request; ignored when the
+     *                                             server doesn't advertise the DSN extension.
      *
      * @throws SmtpException On any protocol or transport failure.
      *
@@ -111,10 +130,17 @@ final class SmtpClient
         string $envelopeFrom,
         array $envelopeRecipients,
         string $rawMessage,
+        ?DsnOptions $dsn = null,
     ): void {
-        $this->open($host, $port, $encryption, $username, $password);
         try {
-            $this->dispatch($envelopeFrom, $envelopeRecipients, $rawMessage);
+            $this->open($host, $port, $encryption, $username, $password);
+        } catch (\Throwable $e) {
+            $this->pushToDeadLetterStore($envelopeFrom, $envelopeRecipients, $rawMessage, $e->getMessage());
+            throw $e instanceof SmtpException ? $e : new SmtpException($e->getMessage(), 0, $e);
+        }
+
+        try {
+            $this->dispatch($envelopeFrom, $envelopeRecipients, $rawMessage, $dsn);
         } finally {
             $this->close();
         }
@@ -149,6 +175,7 @@ final class SmtpClient
             $this->authenticate($username, $password, $capabilities);
         }
 
+        $this->capabilities   = $capabilities;
         $this->openHost       = $host;
         $this->openPort       = $port;
         $this->openEncryption = $encryption;
@@ -163,28 +190,45 @@ final class SmtpClient
      * automatically afterward once $restartThreshold dispatches have been
      * reached on this connection.
      *
-     * @param string       $envelopeFrom       Envelope sender address (MAIL FROM).
-     * @param list<string> $envelopeRecipients Envelope recipient addresses (RCPT TO).
-     * @param string       $rawMessage         Complete RFC 5322 message (headers + body) from MimeBuilder.
+     * @param string          $envelopeFrom       Envelope sender address (MAIL FROM).
+     * @param list<string>    $envelopeRecipients Envelope recipient addresses (RCPT TO).
+     * @param string          $rawMessage         Complete RFC 5322 message (headers + body) from MimeBuilder.
+     * @param DsnOptions|null $dsn                Delivery Status Notification request; ignored when the
+     *                                            server doesn't advertise the DSN extension.
      *
      * @throws SmtpException On any protocol or transport failure.
      *
      * @return void
      */
-    public function dispatch(string $envelopeFrom, array $envelopeRecipients, string $rawMessage): void
+    public function dispatch(string $envelopeFrom, array $envelopeRecipients, string $rawMessage, ?DsnOptions $dsn = null): void
     {
         $this->throttle();
 
+        $dsnSupported = $dsn !== null && \in_array('DSN', $this->capabilities, true);
+
         try {
-            $this->command('MAIL FROM:<' . $envelopeFrom . '>', [250]);
+            $mailFrom = 'MAIL FROM:<' . $envelopeFrom . '>';
+            if ($dsnSupported) {
+                $mailFrom .= ' RET=' . $dsn->ret;
+                if ($dsn->envId !== null) {
+                    $mailFrom .= ' ENVID=' . $dsn->envId;
+                }
+            }
+            $this->command($mailFrom, [250]);
+
             foreach ($envelopeRecipients as $recipient) {
-                $this->command('RCPT TO:<' . $recipient . '>', [250, 251]);
+                $rcptTo = 'RCPT TO:<' . $recipient . '>';
+                if ($dsnSupported && $dsn->notify !== []) {
+                    $rcptTo .= ' NOTIFY=' . \implode(',', $dsn->notify);
+                }
+                $this->command($rcptTo, [250, 251]);
             }
             $this->sendData($rawMessage);
 
             $this->logger->info('mail.sent', ['to' => \implode(',', $envelopeRecipients)]);
         } catch (\Throwable $e) {
             $this->logger->error('mail.failed', ['to' => \implode(',', $envelopeRecipients), 'error' => $e->getMessage()]);
+            $this->pushToDeadLetterStore($envelopeFrom, $envelopeRecipients, $rawMessage, $e->getMessage());
             throw $e instanceof SmtpException ? $e : new SmtpException($e->getMessage(), 0, $e);
         }
 
@@ -225,6 +269,36 @@ final class SmtpClient
     }
 
     /**
+     * Best-effort push to the configured DeadLetterStoreInterface. A store
+     * failure must never mask the real SmtpException about to be thrown.
+     *
+     * @param string       $envelopeFrom
+     * @param list<string> $envelopeRecipients
+     * @param string       $rawMessage
+     * @param string       $error
+     *
+     * @return void
+     */
+    private function pushToDeadLetterStore(string $envelopeFrom, array $envelopeRecipients, string $rawMessage, string $error): void
+    {
+        if ($this->deadLetterStore === null) {
+            return;
+        }
+
+        try {
+            $this->deadLetterStore->push(new FailedDelivery(
+                $envelopeFrom,
+                $envelopeRecipients,
+                $rawMessage,
+                $error,
+                new \DateTimeImmutable(),
+            ));
+        } catch (\Throwable) {
+            // must never mask the original SmtpException
+        }
+    }
+
+    /**
      * Closes and reopens the connection with the same credentials used by the last open() call.
      *
      * @throws SmtpException On any protocol or transport failure.
@@ -259,14 +333,27 @@ final class SmtpClient
         $scheme = $implicitTls ? 'ssl' : 'tcp';
         $target = \str_contains($ip, ':') ? "{$scheme}://[{$ip}]:{$port}" : "{$scheme}://{$ip}:{$port}";
 
-        $context = \stream_context_create([
-            'ssl' => [
-                'peer_name'        => $host,
-                'verify_peer'      => true,
-                'verify_peer_name' => true,
-                'SNI_enabled'      => true,
-            ],
-        ]);
+        $sslOptions = [
+            'peer_name'         => $host,
+            'verify_peer'       => $this->tls->verifyPeer,
+            'verify_peer_name'  => $this->tls->verifyPeer,
+            'allow_self_signed' => !$this->tls->verifyPeer,
+            'SNI_enabled'       => true,
+        ];
+        if ($this->tls->caFile !== null) {
+            $sslOptions['cafile'] = $this->tls->caFile;
+        }
+        if ($this->tls->clientCertFile !== null) {
+            $sslOptions['local_cert'] = $this->tls->clientCertFile;
+        }
+        if ($this->tls->clientKeyFile !== null) {
+            $sslOptions['local_pk'] = $this->tls->clientKeyFile;
+        }
+        if ($this->tls->clientKeyPassphrase !== null) {
+            $sslOptions['passphrase'] = $this->tls->clientKeyPassphrase;
+        }
+
+        $context = \stream_context_create(['ssl' => $sslOptions]);
 
         $errno  = 0;
         $errstr = '';
