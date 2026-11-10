@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate docs
-        uses: rafalmasiarek/php-docs@v1.0.1
+        uses: rafalmasiarek/php-docs@v1.0.2
         with:
           lib-dir: .
           no-header: "true"
