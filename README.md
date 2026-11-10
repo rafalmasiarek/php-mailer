@@ -32,12 +32,12 @@ Receives a FailedDelivery after SmtpClient::dispatch() exhausts its own error ha
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`push()`](#push) | public | `void` | — |
+| [`push()`](#deadletterstoreinterface-push) | public | `void` | — |
 
 <details>
 <summary><code>push()</code></summary>
 
-#### `push()`
+#### `DeadLetterStoreInterface push()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DeadLetterStoreInterface.php#L22)
 
@@ -59,17 +59,17 @@ Signs a complete RFC 5322 message with DKIM (RFC 6376), relaxed/relaxed canonica
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`sign()`](#sign) | public static | `string` | — |
-| [`splitMessage()`](#splitmessage) | private static | `array{headerBlock: string, body: string}` | — |
-| [`parseHeaders()`](#parseheaders) | private static | `list<array{name: string, value: string}>` | Parses an unfolded header block into an ordered list of [name, value] pairs, reassembling folded continuation lines into the owning header's value. |
-| [`findHeader()`](#findheader) | private static | `array{string, string}\|null` | — |
-| [`canonicalizeHeaderRelaxed()`](#canonicalizeheaderrelaxed) | private static | `string` | RFC 6376 §3.4.2 relaxed header canonicalization: lowercase the name, unfold continuation lines, collapse whitespace runs to a single space, trim the value. |
-| [`canonicalizeBodyRelaxed()`](#canonicalizebodyrelaxed) | private static | `string` | RFC 6376 §3.4.4 relaxed body canonicalization: collapse whitespace runs within each line, strip trailing whitespace per line, remove trailing blank lines, end with exactly one CRLF unless the body is empty. |
+| [`sign()`](#dkimsigner-sign) | public static | `string` | — |
+| [`splitMessage()`](#dkimsigner-splitmessage) | private static | `array{headerBlock: string, body: string}` | — |
+| [`parseHeaders()`](#dkimsigner-parseheaders) | private static | `list<array{name: string, value: string}>` | Parses an unfolded header block into an ordered list of [name, value] pairs, reassembling folded continuation lines into the owning header's value. |
+| [`findHeader()`](#dkimsigner-findheader) | private static | `array{string, string}\|null` | — |
+| [`canonicalizeHeaderRelaxed()`](#dkimsigner-canonicalizeheaderrelaxed) | private static | `string` | RFC 6376 §3.4.2 relaxed header canonicalization: lowercase the name, unfold continuation lines, collapse whitespace runs to a single space, trim the value. |
+| [`canonicalizeBodyRelaxed()`](#dkimsigner-canonicalizebodyrelaxed) | private static | `string` | RFC 6376 §3.4.4 relaxed body canonicalization: collapse whitespace runs within each line, strip trailing whitespace per line, remove trailing blank lines, end with exactly one CRLF unless the body is empty. |
 
 <details>
 <summary><code>sign()</code></summary>
 
-#### `sign()`
+#### `DkimSigner sign()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L29)
 
@@ -96,7 +96,7 @@ public static function sign(string $rawMessage, string $privateKeyPem, string $d
 <details>
 <summary><code>splitMessage()</code></summary>
 
-#### `splitMessage()`
+#### `DkimSigner splitMessage()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L84)
 
@@ -115,7 +115,7 @@ private static function splitMessage(string $rawMessage): array
 <details>
 <summary><code>parseHeaders()</code></summary>
 
-#### `parseHeaders()`
+#### `DkimSigner parseHeaders()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L102)
 
@@ -136,7 +136,7 @@ Parses an unfolded header block into an ordered list of [name, value] pairs, rea
 <details>
 <summary><code>findHeader()</code></summary>
 
-#### `findHeader()`
+#### `DkimSigner findHeader()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L135)
 
@@ -156,7 +156,7 @@ private static function findHeader(array $headers, string $name): ?array
 <details>
 <summary><code>canonicalizeHeaderRelaxed()</code></summary>
 
-#### `canonicalizeHeaderRelaxed()`
+#### `DkimSigner canonicalizeHeaderRelaxed()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L156)
 
@@ -178,7 +178,7 @@ RFC 6376 §3.4.2 relaxed header canonicalization: lowercase the name, unfold con
 <details>
 <summary><code>canonicalizeBodyRelaxed()</code></summary>
 
-#### `canonicalizeBodyRelaxed()`
+#### `DkimSigner canonicalizeBodyRelaxed()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DkimSigner.php#L175)
 
@@ -204,12 +204,12 @@ Delivery Status Notification request (RFC 3461). Applied to the MAIL FROM/RCPT T
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct) | public | — | — |
+| [`__construct()`](#dsnoptions-__construct) | public | — | — |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `DsnOptions __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/DsnOptions.php#L24)
 
@@ -235,12 +235,12 @@ Snapshot of one failed SmtpClient::dispatch() call, handed to a DeadLetterStoreI
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct-1) | public | — | — |
+| [`__construct()`](#faileddelivery-__construct) | public | — | — |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `FailedDelivery __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/FailedDelivery.php#L22)
 
@@ -266,20 +266,20 @@ Builds a complete RFC 5322 message (headers + body) ready to send as SMTP DATA c
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`build()`](#build) | public static | `string` | — |
-| [`resolveBody()`](#resolvebody) | private static | `array{contentType: string, encoding: string, body: string}` | Resolves the top-level content-type/encoding/body before any related/mixed wrapping. |
-| [`wrapInRelated()`](#wrapinrelated) | private static | `string` | Wraps the already-resolved body plus inline parts in multipart/related. |
-| [`wrapInMixed()`](#wrapinmixed) | private static | `string` | Wraps the already-resolved body plus attachments in multipart/mixed. |
-| [`chunkBase64()`](#chunkbase64) | private static | `string` | Base64-encodes content and splits it into RFC-compliant 76-char lines. |
-| [`formatAddress()`](#formataddress) | private static | `string` | Formats a "Name <email>" address header value, encoding the name if needed. |
-| [`encodeHeader()`](#encodeheader) | private static | `string` | Encodes a header value per RFC 2047 when it contains non-ASCII bytes. |
-| [`boundary()`](#boundary) | private static | `string` | Generates a unique MIME boundary string. |
-| [`guessMimeType()`](#guessmimetype) | private static | `string` | Best-effort MIME type guess from a file extension; falls back to a generic binary type when unknown. |
+| [`build()`](#mimebuilder-build) | public static | `string` | — |
+| [`resolveBody()`](#mimebuilder-resolvebody) | private static | `array{contentType: string, encoding: string, body: string}` | Resolves the top-level content-type/encoding/body before any related/mixed wrapping. |
+| [`wrapInRelated()`](#mimebuilder-wrapinrelated) | private static | `string` | Wraps the already-resolved body plus inline parts in multipart/related. |
+| [`wrapInMixed()`](#mimebuilder-wrapinmixed) | private static | `string` | Wraps the already-resolved body plus attachments in multipart/mixed. |
+| [`chunkBase64()`](#mimebuilder-chunkbase64) | private static | `string` | Base64-encodes content and splits it into RFC-compliant 76-char lines. |
+| [`formatAddress()`](#mimebuilder-formataddress) | private static | `string` | Formats a "Name <email>" address header value, encoding the name if needed. |
+| [`encodeHeader()`](#mimebuilder-encodeheader) | private static | `string` | Encodes a header value per RFC 2047 when it contains non-ASCII bytes. |
+| [`boundary()`](#mimebuilder-boundary) | private static | `string` | Generates a unique MIME boundary string. |
+| [`guessMimeType()`](#mimebuilder-guessmimetype) | private static | `string` | Best-effort MIME type guess from a file extension; falls back to a generic binary type when unknown. |
 
 <details>
 <summary><code>build()</code></summary>
 
-#### `build()`
+#### `MimeBuilder build()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L51)
 
@@ -317,7 +317,7 @@ public static function build(string $fromEmail, string $fromName, string $toEmai
 <details>
 <summary><code>resolveBody()</code></summary>
 
-#### `resolveBody()`
+#### `MimeBuilder resolveBody()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L144)
 
@@ -340,7 +340,7 @@ Resolves the top-level content-type/encoding/body before any related/mixed wrapp
 <details>
 <summary><code>wrapInRelated()</code></summary>
 
-#### `wrapInRelated()`
+#### `MimeBuilder wrapInRelated()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L186)
 
@@ -369,7 +369,7 @@ Wraps the already-resolved body plus inline parts in multipart/related.
 <details>
 <summary><code>wrapInMixed()</code></summary>
 
-#### `wrapInMixed()`
+#### `MimeBuilder wrapInMixed()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L237)
 
@@ -398,7 +398,7 @@ Wraps the already-resolved body plus attachments in multipart/mixed.
 <details>
 <summary><code>chunkBase64()</code></summary>
 
-#### `chunkBase64()`
+#### `MimeBuilder chunkBase64()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L280)
 
@@ -419,7 +419,7 @@ Base64-encodes content and splits it into RFC-compliant 76-char lines.
 <details>
 <summary><code>formatAddress()</code></summary>
 
-#### `formatAddress()`
+#### `MimeBuilder formatAddress()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L293)
 
@@ -441,7 +441,7 @@ Formats a "Name <email>" address header value, encoding the name if needed.
 <details>
 <summary><code>encodeHeader()</code></summary>
 
-#### `encodeHeader()`
+#### `MimeBuilder encodeHeader()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L309)
 
@@ -462,7 +462,7 @@ Encodes a header value per RFC 2047 when it contains non-ASCII bytes.
 <details>
 <summary><code>boundary()</code></summary>
 
-#### `boundary()`
+#### `MimeBuilder boundary()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L325)
 
@@ -483,7 +483,7 @@ Generates a unique MIME boundary string.
 <details>
 <summary><code>guessMimeType()</code></summary>
 
-#### `guessMimeType()`
+#### `MimeBuilder guessMimeType()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/MimeBuilder.php#L338)
 
@@ -509,13 +509,13 @@ Builds a `multipart/encrypted` (RFC 3156, PGP/MIME) body from an already PGP-arm
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`build()`](#build-1) | public static | [`RawMimeBody`](#rawmimebody) | Builds the raw multipart/encrypted body for an armored PGP MESSAGE block. |
-| [`normalizeCrlf()`](#normalizecrlf) | private static | `string` | Normalises line endings to CRLF, as required by MIME specs. |
+| [`build()`](#pgpmimebodybuilder-build) | public static | [`RawMimeBody`](#rawmimebody) | Builds the raw multipart/encrypted body for an armored PGP MESSAGE block. |
+| [`normalizeCrlf()`](#pgpmimebodybuilder-normalizecrlf) | private static | `string` | Normalises line endings to CRLF, as required by MIME specs. |
 
 <details>
 <summary><code>build()</code></summary>
 
-#### `build()`
+#### `PgpMimeBodyBuilder build()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/PgpMimeBodyBuilder.php#L26)
 
@@ -536,7 +536,7 @@ Builds the raw multipart/encrypted body for an armored PGP MESSAGE block.
 <details>
 <summary><code>normalizeCrlf()</code></summary>
 
-#### `normalizeCrlf()`
+#### `PgpMimeBodyBuilder normalizeCrlf()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/PgpMimeBodyBuilder.php#L60)
 
@@ -562,12 +562,12 @@ A fully-formed MIME body to send verbatim, bypassing normal alternative/mixed co
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct-2) | public | — | — |
+| [`__construct()`](#rawmimebody-__construct) | public | — | — |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `RawMimeBody __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/RawMimeBody.php#L20)
 
@@ -606,33 +606,33 @@ From-scratch SMTP client (RFC 5321) — no PHPMailer dependency. Resolves the ta
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct-3) | public | — | — |
-| [`setDebugCallback()`](#setdebugcallback) | public | `void` | Sets the debug callback invoked with each raw transcript line ("C: ..." for client-sent, "S: ..." for server lines). |
-| [`send()`](#send) | public | `void` | Sends one message over a fresh connection, then disconnects. Convenience wrapper around open()/dispatch()/close() for callers that don't need session reuse. |
-| [`open()`](#open) | public | `void` | Opens a connection and authenticates, ready for one or more dispatch() calls. |
-| [`dispatch()`](#dispatch) | public | `void` | Sends one message over the already-open connection. Applies the configured $maxPerSecond throttle before sending, and reconnects automatically afterward once $restartThreshold dispatches have been reached on this connection. |
-| [`close()`](#close) | public | `void` | Sends QUIT and closes the connection opened by open(). Best-effort — never throws. |
-| [`throttle()`](#throttle) | private | `void` | Sleeps as needed so dispatch() calls within a session respect $maxPerSecond. |
-| [`pushToDeadLetterStore()`](#pushtodeadletterstore) | private | `void` | Best-effort push to the configured DeadLetterStoreInterface. A store failure must never mask the real SmtpException about to be thrown. |
-| [`restart()`](#restart) | private | `void` | Closes and reopens the connection with the same credentials used by the last open() call. |
-| [`connect()`](#connect) | private | `void` | Resolves the host via DnsResolverInterface and opens the socket. |
-| [`enableCrypto()`](#enablecrypto) | private | `void` | Upgrades the current connection to TLS after STARTTLS. |
-| [`readGreeting()`](#readgreeting) | private | `void` | Reads and validates the server's initial 220 greeting. |
-| [`ehlo()`](#ehlo) | private | `list<string>` | Sends EHLO and returns the server's advertised capability lines. |
-| [`authenticate()`](#authenticate) | private | `void` | Authenticates using AUTH PLAIN when the server advertises it, else AUTH LOGIN. |
-| [`sendData()`](#senddata) | private | `void` | Sends the DATA command and the message body with dot-stuffing. |
-| [`quit()`](#quit) | private | `void` | Sends QUIT and closes the connection. Best-effort — never throws. |
-| [`command()`](#command) | private | `string` | Sends one command and validates the response code. Rejects embedded CR/LF in the command — prevents SMTP command/header injection if a caller-supplied value (address, subject) ever contained a newline. |
-| [`write()`](#write) | private | `void` | Writes raw bytes to the connection. |
-| [`readResponse()`](#readresponse) | private | `array{code: int, text: string}` | Reads one (possibly multiline) SMTP response. Continuation lines are "CODE-text\r\n"; the final line is "CODE text\r\n" (4th byte is a space, or end of line). Accumulates until the terminator — never assumes one line is the whole response. Retries stream_select() on EINTR (a signal interrupting the call) instead of treating it as a read failure. |
-| [`readLine()`](#readline) | private | `string` | Reads a single line (up to MAX_LINE_LENGTH bytes), retrying on EINTR. |
-| [`mustConnection()`](#mustconnection) | private | `resource` | — |
-| [`debug()`](#debug) | private | `void` | — |
+| [`__construct()`](#smtpclient-__construct) | public | — | — |
+| [`setDebugCallback()`](#smtpclient-setdebugcallback) | public | `void` | Sets the debug callback invoked with each raw transcript line ("C: ..." for client-sent, "S: ..." for server lines). |
+| [`send()`](#smtpclient-send) | public | `void` | Sends one message over a fresh connection, then disconnects. Convenience wrapper around open()/dispatch()/close() for callers that don't need session reuse. |
+| [`open()`](#smtpclient-open) | public | `void` | Opens a connection and authenticates, ready for one or more dispatch() calls. |
+| [`dispatch()`](#smtpclient-dispatch) | public | `void` | Sends one message over the already-open connection. Applies the configured $maxPerSecond throttle before sending, and reconnects automatically afterward once $restartThreshold dispatches have been reached on this connection. |
+| [`close()`](#smtpclient-close) | public | `void` | Sends QUIT and closes the connection opened by open(). Best-effort — never throws. |
+| [`throttle()`](#smtpclient-throttle) | private | `void` | Sleeps as needed so dispatch() calls within a session respect $maxPerSecond. |
+| [`pushToDeadLetterStore()`](#smtpclient-pushtodeadletterstore) | private | `void` | Best-effort push to the configured DeadLetterStoreInterface. A store failure must never mask the real SmtpException about to be thrown. |
+| [`restart()`](#smtpclient-restart) | private | `void` | Closes and reopens the connection with the same credentials used by the last open() call. |
+| [`connect()`](#smtpclient-connect) | private | `void` | Resolves the host via DnsResolverInterface and opens the socket. |
+| [`enableCrypto()`](#smtpclient-enablecrypto) | private | `void` | Upgrades the current connection to TLS after STARTTLS. |
+| [`readGreeting()`](#smtpclient-readgreeting) | private | `void` | Reads and validates the server's initial 220 greeting. |
+| [`ehlo()`](#smtpclient-ehlo) | private | `list<string>` | Sends EHLO and returns the server's advertised capability lines. |
+| [`authenticate()`](#smtpclient-authenticate) | private | `void` | Authenticates using AUTH PLAIN when the server advertises it, else AUTH LOGIN. |
+| [`sendData()`](#smtpclient-senddata) | private | `void` | Sends the DATA command and the message body with dot-stuffing. |
+| [`quit()`](#smtpclient-quit) | private | `void` | Sends QUIT and closes the connection. Best-effort — never throws. |
+| [`command()`](#smtpclient-command) | private | `string` | Sends one command and validates the response code. Rejects embedded CR/LF in the command — prevents SMTP command/header injection if a caller-supplied value (address, subject) ever contained a newline. |
+| [`write()`](#smtpclient-write) | private | `void` | Writes raw bytes to the connection. |
+| [`readResponse()`](#smtpclient-readresponse) | private | `array{code: int, text: string}` | Reads one (possibly multiline) SMTP response. Continuation lines are "CODE-text\r\n"; the final line is "CODE text\r\n" (4th byte is a space, or end of line). Accumulates until the terminator — never assumes one line is the whole response. Retries stream_select() on EINTR (a signal interrupting the call) instead of treating it as a read failure. |
+| [`readLine()`](#smtpclient-readline) | private | `string` | Reads a single line (up to MAX_LINE_LENGTH bytes), retrying on EINTR. |
+| [`mustConnection()`](#smtpclient-mustconnection) | private | `resource` | — |
+| [`debug()`](#smtpclient-debug) | private | `void` | — |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `SmtpClient __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L81)
 
@@ -656,7 +656,7 @@ public function __construct(DnsResolverInterface $dns, LoggerInterface $logger, 
 <details>
 <summary><code>setDebugCallback()</code></summary>
 
-#### `setDebugCallback()`
+#### `SmtpClient setDebugCallback()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L101)
 
@@ -675,7 +675,7 @@ Sets the debug callback invoked with each raw transcript line ("C: ..." for clie
 <details>
 <summary><code>send()</code></summary>
 
-#### `send()`
+#### `SmtpClient send()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L128)
 
@@ -706,7 +706,7 @@ Sends one message over a fresh connection, then disconnects. Convenience wrapper
 <details>
 <summary><code>open()</code></summary>
 
-#### `open()`
+#### `SmtpClient open()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L166)
 
@@ -733,7 +733,7 @@ Opens a connection and authenticates, ready for one or more dispatch() calls.
 <details>
 <summary><code>dispatch()</code></summary>
 
-#### `dispatch()`
+#### `SmtpClient dispatch()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L207)
 
@@ -759,7 +759,7 @@ Sends one message over the already-open connection. Applies the configured $maxP
 <details>
 <summary><code>close()</code></summary>
 
-#### `close()`
+#### `SmtpClient close()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L252)
 
@@ -774,7 +774,7 @@ Sends QUIT and closes the connection opened by open(). Best-effort — never thr
 <details>
 <summary><code>throttle()</code></summary>
 
-#### `throttle()`
+#### `SmtpClient throttle()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L262)
 
@@ -789,7 +789,7 @@ Sleeps as needed so dispatch() calls within a session respect $maxPerSecond.
 <details>
 <summary><code>pushToDeadLetterStore()</code></summary>
 
-#### `pushToDeadLetterStore()`
+#### `SmtpClient pushToDeadLetterStore()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L286)
 
@@ -811,7 +811,7 @@ Best-effort push to the configured DeadLetterStoreInterface. A store failure mus
 <details>
 <summary><code>restart()</code></summary>
 
-#### `restart()`
+#### `SmtpClient restart()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L312)
 
@@ -830,7 +830,7 @@ Closes and reopens the connection with the same credentials used by the last ope
 <details>
 <summary><code>connect()</code></summary>
 
-#### `connect()`
+#### `SmtpClient connect()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L329)
 
@@ -855,7 +855,7 @@ Resolves the host via DnsResolverInterface and opens the socket.
 <details>
 <summary><code>enableCrypto()</code></summary>
 
-#### `enableCrypto()`
+#### `SmtpClient enableCrypto()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L390)
 
@@ -878,7 +878,7 @@ Upgrades the current connection to TLS after STARTTLS.
 <details>
 <summary><code>readGreeting()</code></summary>
 
-#### `readGreeting()`
+#### `SmtpClient readGreeting()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L405)
 
@@ -897,7 +897,7 @@ Reads and validates the server's initial 220 greeting.
 <details>
 <summary><code>ehlo()</code></summary>
 
-#### `ehlo()`
+#### `SmtpClient ehlo()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L422)
 
@@ -922,7 +922,7 @@ Sends EHLO and returns the server's advertised capability lines.
 <details>
 <summary><code>authenticate()</code></summary>
 
-#### `authenticate()`
+#### `SmtpClient authenticate()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L441)
 
@@ -947,7 +947,7 @@ Authenticates using AUTH PLAIN when the server advertises it, else AUTH LOGIN.
 <details>
 <summary><code>sendData()</code></summary>
 
-#### `sendData()`
+#### `SmtpClient sendData()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L476)
 
@@ -970,7 +970,7 @@ Sends the DATA command and the message body with dot-stuffing.
 <details>
 <summary><code>quit()</code></summary>
 
-#### `quit()`
+#### `SmtpClient quit()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L499)
 
@@ -985,7 +985,7 @@ Sends QUIT and closes the connection. Best-effort — never throws.
 <details>
 <summary><code>command()</code></summary>
 
-#### `command()`
+#### `SmtpClient command()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L531)
 
@@ -1011,7 +1011,7 @@ Sends one command and validates the response code. Rejects embedded CR/LF in the
 <details>
 <summary><code>write()</code></summary>
 
-#### `write()`
+#### `SmtpClient write()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L557)
 
@@ -1034,7 +1034,7 @@ Writes raw bytes to the connection.
 <details>
 <summary><code>readResponse()</code></summary>
 
-#### `readResponse()`
+#### `SmtpClient readResponse()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L579)
 
@@ -1055,7 +1055,7 @@ Reads one (possibly multiline) SMTP response. Continuation lines are "CODE-text\
 <details>
 <summary><code>readLine()</code></summary>
 
-#### `readLine()`
+#### `SmtpClient readLine()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L613)
 
@@ -1080,7 +1080,7 @@ Reads a single line (up to MAX_LINE_LENGTH bytes), retrying on EINTR.
 <details>
 <summary><code>mustConnection()</code></summary>
 
-#### `mustConnection()`
+#### `SmtpClient mustConnection()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L656)
 
@@ -1099,7 +1099,7 @@ private function mustConnection():
 <details>
 <summary><code>debug()</code></summary>
 
-#### `debug()`
+#### `SmtpClient debug()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpClient.php#L670)
 
@@ -1128,17 +1128,17 @@ Captures the raw SMTP transcript and redacts AUTH credential exchange. Pass the 
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct-4) | public | — | — |
-| [`getCallback()`](#getcallback) | public | `callable(string):` | Returns the callable to pass to SmtpClient's debug hook. |
-| [`hasLines()`](#haslines) | public | `bool` | Returns true when at least one SMTP debug line was captured. |
-| [`getLines()`](#getlines) | public | `list<string>` | Returns all captured lines. |
-| [`writeToFile()`](#writetofile) | public | `void` | Writes the captured transcript to a file, creating parent directories as needed. |
-| [`append()`](#append) | private | `void` | Prepends a timestamp and stores a line. |
+| [`__construct()`](#smtpdebugcapture-__construct) | public | — | — |
+| [`getCallback()`](#smtpdebugcapture-getcallback) | public | `callable(string):` | Returns the callable to pass to SmtpClient's debug hook. |
+| [`hasLines()`](#smtpdebugcapture-haslines) | public | `bool` | Returns true when at least one SMTP debug line was captured. |
+| [`getLines()`](#smtpdebugcapture-getlines) | public | `list<string>` | Returns all captured lines. |
+| [`writeToFile()`](#smtpdebugcapture-writetofile) | public | `void` | Writes the captured transcript to a file, creating parent directories as needed. |
+| [`append()`](#smtpdebugcapture-append) | private | `void` | Prepends a timestamp and stores a line. |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `SmtpDebugCapture __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L35)
 
@@ -1155,7 +1155,7 @@ public function __construct(ClockInterface $clock)
 <details>
 <summary><code>getCallback()</code></summary>
 
-#### `getCallback()`
+#### `SmtpDebugCapture getCallback()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L44)
 
@@ -1172,7 +1172,7 @@ Returns the callable to pass to SmtpClient's debug hook.
 <details>
 <summary><code>hasLines()</code></summary>
 
-#### `hasLines()`
+#### `SmtpDebugCapture hasLines()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L75)
 
@@ -1189,7 +1189,7 @@ Returns true when at least one SMTP debug line was captured.
 <details>
 <summary><code>getLines()</code></summary>
 
-#### `getLines()`
+#### `SmtpDebugCapture getLines()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L85)
 
@@ -1206,7 +1206,7 @@ Returns all captured lines.
 <details>
 <summary><code>writeToFile()</code></summary>
 
-#### `writeToFile()`
+#### `SmtpDebugCapture writeToFile()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L96)
 
@@ -1225,7 +1225,7 @@ Writes the captured transcript to a file, creating parent directories as needed.
 <details>
 <summary><code>append()</code></summary>
 
-#### `append()`
+#### `SmtpDebugCapture append()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpDebugCapture.php#L111)
 
@@ -1249,13 +1249,13 @@ Canonical SMTP error codes and classifier. All needle-matching logic lives here 
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`message()`](#message) | public static | `string` | Returns the human-readable message for an ERR_SMTP_* code. |
-| [`classify()`](#classify) | public static | `string` | Classifies an SMTP error string into one of the ERR_SMTP_* constants. Checks for an RFC 3463 enhanced status code first — Postfix and most modern MTAs include one on nearly every rejection, and it is far more reliable than matching human-readable text that varies between server software. Falls back to free-text needles for connection-level failures that never reach the SMTP protocol layer, where no such code exists. |
+| [`message()`](#smtperrorcode-message) | public static | `string` | Returns the human-readable message for an ERR_SMTP_* code. |
+| [`classify()`](#smtperrorcode-classify) | public static | `string` | Classifies an SMTP error string into one of the ERR_SMTP_* constants. Checks for an RFC 3463 enhanced status code first — Postfix and most modern MTAs include one on nearly every rejection, and it is far more reliable than matching human-readable text that varies between server software. Falls back to free-text needles for connection-level failures that never reach the SMTP protocol layer, where no such code exists. |
 
 <details>
 <summary><code>message()</code></summary>
 
-#### `message()`
+#### `SmtpErrorCode message()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpErrorCode.php#L81)
 
@@ -1276,7 +1276,7 @@ Returns the human-readable message for an ERR_SMTP_* code.
 <details>
 <summary><code>classify()</code></summary>
 
-#### `classify()`
+#### `SmtpErrorCode classify()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SmtpErrorCode.php#L101)
 
@@ -1313,12 +1313,12 @@ implements `ClockInterface`
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`now()`](#now) | public | `\DateTimeImmutable` | {@inheritDoc} |
+| [`now()`](#systemclock-now) | public | `\DateTimeImmutable` | {@inheritDoc} |
 
 <details>
 <summary><code>now()</code></summary>
 
-#### `now()`
+#### `SystemClock now()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/SystemClock.php#L19)
 
@@ -1340,12 +1340,12 @@ TLS behavior for SmtpClient's connection (implicit TLS and STARTTLS alike).
 
 | Method | Visibility | Returns | Summary |
 |---|---|---|---|
-| [`__construct()`](#__construct-5) | public | — | — |
+| [`__construct()`](#tlsoptions-__construct) | public | — | — |
 
 <details>
 <summary><code>__construct()</code></summary>
 
-#### `__construct()`
+#### `TlsOptions __construct()`
 
 [source](https://github.com/rafalmasiarek/php-mailer/blob/main/src/TlsOptions.php#L28)
 
