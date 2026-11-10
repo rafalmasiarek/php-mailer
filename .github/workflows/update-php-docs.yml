@@ -18,6 +18,7 @@ jobs:
         uses: rafalmasiarek/php-docs@v1.0.1
         with:
           lib-dir: .
+          no-header: "true"
           output-file: README.md
           output-mode: inject
           repo-url: https://github.com/rafalmasiarek/php-mailer
