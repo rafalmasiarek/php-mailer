@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "composer.json"
+      - "README.yml"
   workflow_dispatch:
 
 jobs:
@@ -17,21 +18,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate docs
+      - name: Generate API docs
         uses: rafalmasiarek/php-docs@v1.0.2
         with:
           lib-dir: .
           no-header: "true"
-          output-file: README.md
-          output-mode: inject
+          output-file: docs/api.md
           repo-url: https://github.com/rafalmasiarek/php-mailer
           ref: main
+
+      - name: Generate README
+        uses: rafalmasiarek/readme-gen@latest
+        with:
+          config: README.yml
+          output: README.md
+          version: latest
 
       - name: Git Auto-Commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: auto-update README.md [skip ci]"
+          commit_message: "docs: auto-update README.md and docs/api.md [skip ci]"
           commit_options: "--no-verify --signoff"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "41898282+github-actions[bot]@users.noreply.github.com"
           commit_author: "github-actions[bot] <actions@github.com>"
+          file_pattern: "README.md docs/api.md"
