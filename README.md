@@ -1,6 +1,4 @@
 # mailer
-![](https://raw.githubusercontent.com/rafalmasiarek/readme-gen/latest/banners/.gitkeep)
-
 PHP mailer: from-scratch SMTP client + MIME builder (no PHPMailer), native PGP/MIME, structured PSR-3 SMTP diagnostics
 
 
